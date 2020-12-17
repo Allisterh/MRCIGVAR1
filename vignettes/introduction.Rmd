@@ -1,0 +1,1710 @@
+﻿---
+title: "MRCIgVARs"
+author: "Pu Chen"
+date: "12/14/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+This is a short introduction to the package MRCIGVAR. An $\alpha$ version of MRCIGVAR is available at  GitHub  <https://github.com/puchen8229/MRCIGVAR1>.
+
+* MRCIGVAR includes 8 classes of econometric models:
+
+    + VAR: vector autoregressive models
+    + CIVAR: cointegrated vector autoregressive models which are also known as vector error correction models
+    + GVAR: global vector autoregression models
+    + CIGVAR: cointegrated vector autoregression models
+    + MRVAR: multi regime vector autoregressive models
+    + MRCIVAR: multi regime cointegrated vector auto regressive models
+    + MRGVAR: multi regime global vector autoregressive models
+    + MRCIGVAR: multi regime cointegrated vector autoregressive models
+
+For each class of the models, the tools in the package provide functionalities of data generation with flexible model specifications, parameter estimation, model selection, and impulse response functions. This introduction demonstrate with sample codes how to use the package for practical applications.
+
+## VAR/CIVAR Models
+
+### VAR 
+
+A vector autoregressive (VAR) model is defined as follows.
+$$Y_t = C_0 + B_1Y_{t-1} + B_2Y_{t-1} + ... + B_pY_{t-p} + u_t$$
+with $u_t \sim N(0,\Sigma_0)$.
+
+The main functions for this class of models are 
+
+* VARData
+* VARest
+
+In addition, two functions summary and irf from the R package $vars$ can be used. The following codes demonstrate how VARData is used  generate data from a VAR process with a variety of specifications.
+```{VARs}
+res_d = VARData(n=2,p=2,T=100,type="const")
+res_d = VARData(n=2,p=2,T=10,Co=c(1:2)*0,type="none")
+res_d = VARData(n=2,p=2,T=10,Co=c(1:2),  type="const")
+res_d = VARData(n=3,p=2,T=200,type="exog1",X=matrix(rnorm(400),200,2))
+res_d = VARData(n=3,p=2,T=200,Co=matrix(c(0,0,0,1,2,3,3,2,1),3,3), type="exog0",X=matrix(rnorm(400),200,2))
+```
+VARData can be used to generate data with provided parameters.  If parametres are not provided VARData will generate data by default with randomly chosen parameters. More details can be found by using 
+```{VARest}
+?VARData 
+```
+
+The output of VARData is a VAR object containing generated data and parameters as well as the residuals.The components of a generated VAR object correspond to the model variables and parameters as follows.
+
+res_d\$Y:      $Y_1,Y_2,...,Y_T$
+
+res_d\$Co:     $C_o$
+
+res_d\$B:      $B_1,B_2,...B_p$
+
+res_d\$Sigmao: $\Sigma_0$
+
+res_d\$resid:  $u_1,u_2,...,u_T$
+
+res_d\$p:      $p$
+
+The function VARest can be used to estimate the parameters of the generated data. 
+```
+res_d = VARData(n=2,p=2,T=100,type="const")
+res_e = VARest(res_d)
+summary(res_e$varp)
+IRF = irf(res_e$varp,nstep=20)
+plot(IRF)
+
+```
+
+The output of VARest is a VAR object with estimated parameters. varp is a component of the output of VARest which can be used to generate the impulse response  functions and to show the estimation results [^1] 
+
+[^1]: irf is a function of the R package vars and it can be applied to res_e\$varp which is a var object of the R package vars.
+
+For empirical applications it is recommended to follow the steps below:
+
+  + Use VARData to generate a VAR object.
+  + Replace the generated model data with the empirical data.
+  + Run a model selection procedure to determine the specification of the model.
+  + Use VARData to re-generate a VAR object with the selected specification and replace the model data with the empirical data
+  + Estimate the selected model.
+  + Run the analysis.
+
+```{procedure of modelling using VARs}
+
+data(Canada)
+dim(Canada)
+trend = 1:84
+# step 1: generating a VAR object
+res_d = VARData(n=4,p=2,T=84,Co=matrix(c(0,0,0,0),4,1),type="none")
+
+# step 2: Replacing the model data with the empirical data
+res_d$Y = as.matrix(Canada)
+res_e = VARest(res=res_d)
+res_e$BIC
+res_e$AIC
+
+# step 3 Model selection based on AIC or BIC
+
+res_d = VARData(n=4,p=2,T=84,Co=matrix(c(1,1,1,1),4,1),type="const")
+res_d$Y = as.matrix(Canada)
+res_e = VARest(res=res_d)
+res_e$BIC
+res_e$AIC
+
+trend=as.matrix(trend)
+colnames(trend) = c("TREND")
+
+res_d = VARData(n=4,p=2,T=84,Co=matrix(c(0,0,0,0,1,1,1,1),4,2),type="exog0",X=trend)
+res_d$Y = as.matrix(Canada)
+res_e = VARest(res=res_d)
+res_e$BIC
+res_e$AIC
+
+res_d = VARData(n=4,p=2,T=84,Co=matrix(c(1,1,1,1,1,1,1,1),4,2),type="exog1",X=trend)
+res_d$Y = as.matrix(Canada)
+res_e = VARest(res=res_d)
+res_e$BIC
+res_e$AIC
+
+```
+
+Comparing AIC of the 4 different specifications, the model with constant intercept and no trend is the most appropriate model for the data. [^2] 
+
+[^2]: More functionalities for modelling VAR models can be found in the R package vars. In particular, the function VARselect of $vars$ can be used to specify the lag length of a VAR model.
+
+```{choice of the VAR model}
+
+# step 4: Estimate the chosen model
+res_d = VARData(n=4,p=2,T=84,Co=matrix(c(1,1,1,1),4,1),type="const")
+res_d$Y = as.matrix(Canada)
+res_e = VARest(res=res_d)
+summary(res_e$varp)
+
+# step 5: Estimate the chosen model
+IRF = irf(res_e$varp,nstep=20,cumulative=FALSE)
+plot(IRF)
+
+```
+
+### CIVAR 
+
+Cointegrated vector autoregressive model (CIVAR) is defined as follows.
+$$Y_t = C_0 + B_1Y_{t-1} + B_2Y_{t-1} + ... + B_pY_{t-p} + u_t$$
+Because of unit roots of the VAR process and cointegration relations, it has the following vector error correction form:
+$$\Delta Y_t = C_0 + \alpha\beta' Y_{t-1} + B^*_1\Delta Y_{t-1} + ... + B^*_{p-1}\Delta Y_{t-p+1} + u_t$$
+with $\alpha$ and $\beta$ are $(n\times ckr)$ matrices and $u_t \sim N(0,\Sigma_0)$.
+
+For cointegrated VAR models the following four functions can be used
+
++ CIVARData
++ CIVARest
++ summary_CIVAR
++ irf_CIVAR_CB
++ STAT
+                        
+The following codes demonstrate how CIVARData can be used as a data generating process to generate data from a cointegrated VAR process with a variety of specifications.
+```{CIVARData}
+res_d = CIVARData(n=2,p=2,T=100,type="const")
+res_d = CIVARData(n=3,p=2,T=100,Co=c(1:2)*0,type="none")
+res_d = CIVARData(n=4,p=1,T=100,Co=c(1:2)*NA,type="const",crk=2)
+STAT(res_d$B)
+```
+The output of CIVARData is a CIVAR object containing the generated data, the used parameters as well as the residuals. The components correspond to the model variables and parameters as follows.
+
+res_d\$Y:      $Y_1,Y_2,...,Y_T$
+
+res_d\$Co:     $C_o$
+
+res_d\$B:      $B_1,B_2,...B_p$
+
+res_d\$Sigmao: $\Sigma_0$
+
+res_d\$resid:  $u_1,u_2,...,u_T$
+
+res_d\$crk:    $crk$
+
+res_d\$p:      $p$
+
+CIVARData differ from VARData in that the data generating process contains unit roots. STAT can be used to calculate the roots of characteristic function in Lags or the eigen values of the the companion matrix of CIVAR model.
+The default number of unit root is one. To specify more than one unit roots, more than one rows in r_np matrix should contain ones.
+
+The function CIVARest is used to estimate the parameters of the generated CIVAR data.
+```{CIVARest}
+p = 3
+n = 4
+r_np = matrix(c(1,2,1.5,1.5,2.5,2.5,2,-1.5,2,-4,1.9,-2.1),4,3)
+### the r_np matrix shows there is one unit root in the system. Hence the cointegration rank: crk = 3
+res_d  = CIVARData(n=4,p=3,T=500,r_np=r_np,Co=matrix(0,n,1) ,type="none",crk=3)
+res_e  = CIVARest(res=res_d)
+sum(abs(res_e$B-res_d$B))
+sum(abs(res_e$Co-res_d$Co))
+
+B0 = res_d$B
+res_d  = CIVARData(n=4,p=3,T=50000,B = B0,Co=matrix(0,n,1) ,type="none",crk=3)
+res_e  = CIVARest(res=res_d)
+res_e$tst[[1]]
+sum(abs(res_e$B-res_d$B))
+sum(abs(res_e$Co-res_d$Co))
+
+```
+
+sum(abs(res_e\$B-res_d\$B)) can be used to gauge the difference of the estimated parameters and the true parameters. Through changing of sample size T, we can gauge the convergency rate of the estimator. res_e\$tst[[1]] shows the Johansen test results.
+For empirical applications it is recommended to the following steps:
+ 
+   + Use CIVARData to generate a CIVAR object.
+   + Replace the generated model data with the empirical data.
+   + Run a model selection and testing procedure to determine the specification of the model.
+   + Use CIVARData to generate a CIVAR object and replace the model data with empirical data.
+   + Estimate the selected model.
+   + Run the analysis.
+
+```{CIVARs}
+
+data(Canada)
+dim(Canada)
+trend = 1:84
+# step 1: generating a VAR object
+plot(ts(as.matrix(Canada)))
+
+# step 1 level VAR selection
+
+VARselect(Canada)
+
+res_d = CIVARData(n=4,p=2,T=84,type="const",crk=2)
+res_d$Y = Canada
+plot(ts(res_d$Y))
+res_e = CIVARest(res=res_d)
+res_e$tst[[1]]
+### the JH test shows that there is only one cointegration relation
+
+# step 2: Respecify the DGP and replacing the model data with the empirical data and estimate the model parameters
+
+res_d = CIVARData(n=4,p=2,T=84,type="const",crk=1)
+res_d$Y = Canada
+res_e = CIVARest(res=res_d)
+res_e$tst[[1]]
+summary(res_e$varp)
+
+res_e$BIC
+res_e$AIC
+
+# step 3 Model selection based on AIC or BIC
+res_d2 = CIVARData(n=4,p=2,T=84,Co=matrix(c(1,1,1,1),4,1)*0,type="none",crk=1)
+res_d2$Y = as.matrix(Canada)
+res_e2 = CIVARest(res=res_d2)
+res_e2$BIC
+res_e2$AIC
+res_e2$tst[[1]]
+
+##### select the specification with the intercept
+
+# step 4 IRF
+IRF = irf_B_sigma(B=res_e$B,sigma=res_e$Sigma,nstep=40,irf="gen1")
+
+par(mfrow=c(4,4))
+plot(IRF[1,1,],type="l")
+plot(IRF[2,1,],type="l")
+plot(IRF[3,1,],type="l")
+plot(IRF[4,1,],type="l")
+plot(IRF[1,2,],type="l")
+plot(IRF[2,2,],type="l")
+plot(IRF[3,2,],type="l")
+plot(IRF[4,2,],type="l")
+plot(IRF[1,3,],type="l")
+plot(IRF[2,3,],type="l")
+plot(IRF[3,3,],type="l")
+plot(IRF[4,3,],type="l")
+plot(IRF[1,4,],type="l")
+plot(IRF[2,4,],type="l")
+plot(IRF[3,4,],type="l")
+plot(IRF[4,4,],type="l")
+
+
+IRF_CB = irf_CIVAR_CB(res=res_e2, nstep=20, comb=NA, irf = "gen1", runs = 20, conf = c(0.05, 0.95))
+
+par(mfrow=c(4,4))
+plott(IRF_CB,1,1)
+plott(IRF_CB,2,1)
+plott(IRF_CB,3,1)
+plott(IRF_CB,4,1)
+plott(IRF_CB,1,2)
+plott(IRF_CB,2,2)
+plott(IRF_CB,3,2)
+plott(IRF_CB,4,2)
+plott(IRF_CB,1,3)
+plott(IRF_CB,2,3)
+plott(IRF_CB,3,3)
+plott(IRF_CB,4,3)
+plott(IRF_CB,1,4)
+plott(IRF_CB,2,4)
+plott(IRF_CB,3,4)
+plott(IRF_CB,4,4)
+
+```
+##  MRVAR/MRCIVAR Models
+
+### MRVAR
+
+A multi regime VAR model is defined:
+
+$$
+    Y_t = \Big(C_o^{(1)} + \sum_{j=1}^{p}B_{j}^{(1)} Y_{t}+u_t^{(1)}\Big){\bf 1}_{[f_{t-d} \le \tau]}+\Big(C_o^{(2)} + \sum_{j=1}^{p}B_{j}^{(2)} Y_{t}+u_t^{(2)}\Big){\bf 1}_{[f_{t-d} > \tau]}
+$$
+where $u^{(k)}_t \sim N(0,\Sigma_0^{(k)})$ for $k= 1,2$.
+
+The main functions for this class of models are 
+
++ MRVARData
++ MRVARest and summary_MRVAR
++ MRVAR_Selectm
++ girf_MRVAR_NM1_CB2,
++ girf_MRVAR_RM
+
+Following sample codes demonstrate how MRVARData is be used to generate data from MRVAR processes with a variety of specifications.
+
+```{MRVARData}
+p = matrix(c(2,1,0,0),2,2)
+res_d = MRVARData(n=2,p=p,T=300,S=2,SESVI=1,type="none")
+max(res_d$Y)
+res_e = MRVARest(res=res_d)
+summary_MRVAR(res_e)
+```
+The output of MRVARData is a MRVAR object containing the generated data, the used parameters as well as the residuals. The components of a MRVAR object correspond to the model variables and parameters as follows.
+
+res_d\$Y:      $Y_1,Y_2,...,Y_T$
+
+res_d\$Co:     $C_o^{(1)}, C_o^{(1)}$
+
+res_d\$B_0:      $B^{(1)}_1,B^{(1)}_2,...,B^{(1)}_p;B^{(2)}_1,B^{(2)}_2,...B^{(2)}_p$
+
+res_d\$Sigmao: $\Sigma^{(1)}_0,\Sigma^{(2)}_0$
+
+res_d\$Uo:  $u^{(1)}_1,u^{(1)}_2,...,u^{(1)}_T;u^{(2)}_1,u^{(2)}_2,...,u^{(2)}_T$
+
+res_d\$TH:    $\tau$
+
+res_d\$p:      $p$
+
+
+
+
+
+
+
+$p=
+\left(
+  \begin{array}{cc}
+    2 & 0 \\
+    1 & 0 \\
+  \end{array}
+\right)$ specifies that the lag for the first regime is 2 and there is no exogenous variables while for the second regime the lag length is 1 and there is no exogenous variables too. The function MRVARest is used to estimate the parameters of the generated data.
+
+```{MRVARs}
+p = matrix(c(2,1,0,0),2,2)
+res_d = MRVARData(n=2,p=p,T=300,S=2,SESVI=1,type="none")
+max(res_d$Y)
+res_e = MRVARest(res=res_d)
+res_e$LH_AIC
+res_e$LH_BIC
+res_e$ORBIC
+res_e$ORAIC
+res_e$LH_P
+res_e$LH_N
+summary_MRVAR(res_e)
+RESS = res_e
+#### IRF without regime migration
+IRF    = irf_MRVAR_NM1(RESS,nstep=10,comb=NA,irf="gen")
+IRF_CB = irf_MRVAR_NM1_CB2(RESS,nstep=20,comb=NA,irf="gen",runs=100,conf=c(0.05,0.90))
+
+par(mfrow=c(4,2))
+plott(IRF_CB[,,,,1],1,1)
+plott(IRF_CB[,,,,1],1,2)
+plott(IRF_CB[,,,,1],2,1)
+plott(IRF_CB[,,,,1],2,2)
+
+plott(IRF_CB[,,,,2],1,1)
+plott(IRF_CB[,,,,2],1,2)
+plott(IRF_CB[,,,,2],2,1)
+plott(IRF_CB[,,,,2],2,2)
+
+#### IRF with regime migration
+
+RF3   = girf_MRVAR_RM(RES=RESS,shock=c(1,1),R = 800,nstep=20,state=1,resid_method="parametric")
+
+RF4 = girf_MRVAR_RM_CB(RES=RESS, shock=c(1,1), R=800, nstep=20, state=1,
+          resid_method = "parametric", conf_level=c(0.05,0.95), N=300)
+
+
+dim(RF3)
+
+x11()
+par(mfrow=c(2,2))
+plot(RF3[1,1,],type="l")
+plot(RF3[1,2,],type="l")
+plot(RF3[2,1,],type="l")
+plot(RF3[2,2,],type="l")
+
+dim(RF4)
+x11()
+par(mfrow=c(2,2))
+plott(RF4[,,,],1,1)
+plott(RF4[,,,],1,2)
+plott(RF4[,,,],2,1)
+plott(RF4[,,,],2,2)
+
+```
+
+girf_MRVAR_RM_CB can be used to produce the generalized impulse response function with regime migrations. irf_MRVAR_NM1_CB2 is used to generated the within-regime impulse response functions [^4]
+
+[^4]: M. Ehrmann, M. Ellison, and N. Valla (2003) for more details of the regime-dependent impulse response functions 
+
+The following codes demonstate how AIC and BIC criteria can be used in the model specification. 
+
+```{MRVAR model selestion}
+Sigma = 1:(4*4*2)
+dim(Sigma) = c(4,4,2)
+Sigma[,,1] = diag(4)*2
+Sigma[,,2] = diag(4)*2
+p=matrix(0,2,2)
+p[,1] = c(3,2)
+
+res_d = MRVARData(n=4,p=p,T=8000,S=2,SESVI=1,TH=0,Sigmao=Sigma,type="none")
+max(res_d$Y)
+res_e = MRVARest(res=res_d)
+
+# providing possible threshold values
+TH_v = c(-0.5,0.0,0.5)
+
+# providing the maximum lags for the two regimes
+L_v = c(5,5)
+
+Sel = MRVAR_Select(res=res_e,L_V=L_v,TH_V=TH_v)
+Sel[which.min(Sel[,5]),]
+Sel[which.min(Sel[,4]),]
+MRVAR_Select_Summary(Sel)
+```
+
+The above codes illustrate how model selection criteria can be used to assist the specification of the lag length in different regimes as well as the threshold values. In the example above, the values of information criteria of the two-regime-VAR AIC and BIC are less than that of the one regime model ORAIC and ORBIC, which indicates that the two-regime-model is a more proper model for the data.
+
+The option X in the function MRVARData can be used to construct MRVAR models with exogenous variables. The following examples show how it is used.
+```{MRVAR_X}
+#### MRVAR with exogenous variables X is (T x k x S ) array, allowing
+#### different exogenous variables in different regimes. k is the number of exogenous variables.
+
+X1=matrix(rnorm(2*300),300,2)
+X2=matrix(rnorm(2*300),300,2)
+
+XX = cbind(X1,X2); dim(XX) = c(300,2,2)
+
+p = matrix(c(2,1,2,2),2,2)
+res_d = MRVARData(n=2,p=p,T=300,S=2,SESVI=1,type="exog1",X=XX)
+max(res_d$Y)
+res_e = MRVARest(res=res_d)
+summary_MRVAR(res_e)
+
+#### If the number of exogenous variables are different in two regimes, the excess columns can be filled with zeros.
+
+X=matrix(rnorm(2*300),300,2)
+XX = cbind(X,X); dim(XX) = c(300,2,2);XX[,2,2]=0
+
+p = matrix(c(2,1,2,2),2,2)
+res_d = MRVARData(n=2,p=p,T=300,S=2,SESVI=1,type="exog1",X=XX)
+max(res_d$Y)
+res_e = MRVARest(res=res_d)
+summary_MRVAR(res_e)
+
+```
+
+
+For empirical applications it is recommended to follow the steps:
+
++ Use MRVARData to generate a MRVAR object.
++ Replace the generated model data with the empirical data.
++ Run a model selection procedure to determine the specification of the model.
++ Estimate the selected model.
++ Run the analysis.
+
+
+### MRCIVAR
+
+A multi regime cointegrated VAR model is defined:
+
+$$
+    Y_t = \Big(C_o^{(1)} + \sum_{j=1}^{p}B_{j}^{(1)} Y_{t-j}+u_t^{(1)}\Big){\bf 1}_{[f_{t-d} \le \tau]}+\Big(C_o^{(2)} + \sum_{j=1}^{p}B_{j}^{(2)} Y_{t-j}+u_t^{(2)}\Big){\bf 1}_{[f_{t-d} > \tau]}
+$$
+where $u^{(k)}_t \sim N(0,\Sigma_0^{(k)})$ for $k= 1,2$. Because of unit roots and cointegration relations, the MRCIVAR has a
+vector error correction form:
+$$
+    \Delta Y_t = \Big(C_o^{(1)} + \alpha^{(1)}\beta Y_{t-1} + \sum_{j=1}^{p-1}B_{j}^{*(1)} \Delta Y_{t-j}+u_t^{(1)}\Big){\bf 1}_{[f_{t-d} \le \tau]}+\Big(C_o^{(2)} + \alpha^{(2)}\beta Y_{t-1} + \sum_{j=1}^{p-1}B_{j}^{*(2)} Y_{t-j}+u_t^{(2)}\Big){\bf 1}_{[f_{t-d} > \tau]}
+$$
+where $\alpha^{(1)}$, $\alpha^{(2)}$ and $\beta$ are $(n\times ckr)$ matrices. We assume the cointegration ralations are identical in different regimes.
+
+The main functions for this class of models are 
+
++ MRCIVARData, MRCIVARDatam, MRCIVARDatam1
++ MRCIVARest and MRCIVARestm
++ Summary_MRCIVAR
++ MRCIVAR_Select and MRCIVAR_Selectm
++ irf_MRCIVARm
+
+Both MRCIVARData and MRCIVARDatam generate data from a two-regime cointegrated VAR process with identical cointegration relations. MRCIVARData generates data of cointegrated processes with identical adjustment speeds and MRCIVARDatam generated data of cointegrated processes with different adjustment speeds. MRCIVARDatam1 generates data from an linear transformation of an underlying stationary MRVAR and a set of unit root processes. The following sample codes demonstrate how MRVARData/MRCIDatam/MECIVARDatam1 and MRCIVARest/MRCIVARestm can be used to generate data with a variety of specifications and how MRCIVARest is used to estimate the parameters. MRCIVAR_Select and MRCIVAR_Selectm can be used to select model specifications based on AIC or BIC criteria.
+
+```{MRCIVAR}
+Sigma = 1:(4*4*2)
+dim(Sigma) = c(4,4,2)
+Sigma[,,1] = diag(4)
+Sigma[,,2] = diag(4)
+p=matrix(0,2,2)
+p[,1] = c(3,2)
+
+res_d = MRCIVARDatam(n=4,p=p,T=261,S=2,SESVI=1,TH=0,Sigmao=Sigma,type="const",r=1)
+res_e = MRCIVARestm(res=res_d)
+```
+The output of MRCIVARData is a MRCIVAR object containing generated data and parameters as well as the residuals. The components of the generated MRCIVAR object correspond to the model variables and parameters as follows.
+
+res_d\$Y:      $Y_1,Y_2,...,Y_T$
+
+res_d\$Co:     $C_o^{(1)}, C_o^{(2)}$
+
+res_d\$B_0:      $B^{(1)}_1,B^{(1)}_2,...,B^{(1)}_p;B^{(2)}_1,B^{(2)}_2,...B^{(2)}_p$
+
+res_d\$Sigmao: $\Sigma^{(1)}_0,\Sigma^{(2)}_0$
+
+res_d\$Uo:  $u^{(1)}_1,u^{(1)}_2,...,u^{(1)}_T;u^{(2)}_1,u^{(2)}_2,...,u^{(2)}_T$
+
+res_d\$TH:    $\tau$
+
+res_d\$p:      $p$
+
+res_d\$crk:    $crk$
+
+
+```{MRCIV irf}
+## calculaion of alpha and beta in the two regimes
+B2CIB(res_d$Bo[,,,1])[[1]][,,1]
+B2CIB(res_d$Bo[,,,2])[[1]][,,1]
+## check the roots of the characteristic equation
+STAT(res_d$Bo[,,,1])
+STAT(res_d$Bo[,,,2])
+## check the consistency via changing the sample size
+sum(abs(res_d$Bo - res_e[[1]]$Bo))
+sum(abs(res_d$Co - res_e[[1]]$Co))
+
+plot(ts(res_d$Y))
+## Johasen test of the cointegration rank
+res_e$res$tst[[1]]
+## Regression format of the VECM
+summary(res_e$res$tst$VECM1)
+
+## within regime impulse response function
+IRF   = irf_MRCIVARm(res_e,nstep=20,irf="gen1",runs=400,comb=NA,G=NA,conf=c(0.05,0.95))
+### for the impulse response function of regime 2
+IRF_CB = IRF[[2]]
+x11()
+par(mfrow=c(4,4))
+plott(IRF_CB,1,1)
+plott(IRF_CB,2,1)
+plott(IRF_CB,3,1)
+plott(IRF_CB,4,1)
+plott(IRF_CB,1,2)
+plott(IRF_CB,2,2)
+plott(IRF_CB,3,2)
+plott(IRF_CB,4,2)
+plott(IRF_CB,1,3)
+plott(IRF_CB,2,3)
+plott(IRF_CB,3,3)
+plott(IRF_CB,4,3)
+plott(IRF_CB,1,4)
+plott(IRF_CB,2,4)
+plott(IRF_CB,3,4)
+plott(IRF_CB,4,4)
+### for the impulse response function of regime 1
+IRF_CB = IRF[[1]]
+x11()
+par(mfrow=c(4,4))
+plott(IRF_CB,1,1)
+plott(IRF_CB,2,1)
+plott(IRF_CB,3,1)
+plott(IRF_CB,4,1)
+plott(IRF_CB,1,2)
+plott(IRF_CB,2,2)
+plott(IRF_CB,3,2)
+plott(IRF_CB,4,2)
+plott(IRF_CB,1,3)
+plott(IRF_CB,2,3)
+plott(IRF_CB,3,3)
+plott(IRF_CB,4,3)
+plott(IRF_CB,1,4)
+plott(IRF_CB,2,4)
+plott(IRF_CB,3,4)
+plott(IRF_CB,4,4)
+  
+```
+
+
+$p=
+\left(
+  \begin{array}{cc}
+    3 & 0 \\
+    2 & 0 \\
+  \end{array}
+\right)$ specifies that the lag length of the first regime is 3 and there is no exogenous variables, while the lag length of the second regime is 2 and there is no exogenous variables either. The function MRCIVARestm is used to estimate the parameters of the generated data. The output of MRCIVARestm is a MRCIVAR object containing estimated result and test statistics.
+
+In the example above we have r=1 implying we have one unit root and hance three cointegration relations. res_e\$res\$tst[[1]] shows the result of the Johansen test of the coitegration rank. summary(res_e\$res\$tst\$VECM1) gives the regression format of the VECM: the first three regressants are the three cointegration relations in the first regime with the cointegration coefficient normalized to one and the second three regressants are the three cointegration relations in the second regime. The next 8 regressants correspond to the first difference of the variables with lag 1 and 2 of regime 1, and the next 4 regressants correspond to the first difference of the variables with lag 1 of the second regime. Recall that in our MRCIVAR example the lags of the level VAR are 3 and 2 for the two regimes respectively. The lags for of the VECM in the first difference will be 2 and 1 respectively. The last two regressants correspond to the intercepts of the two regimes. irf_MRCIVARm is used to generate the within regime impulse response functions of the estimated MRCIVAR model. The following example shows how to use information criteria to specify the model lags and the threshold values.
+
+
+```{MRCIVAR_Select}
+Sigma = 1:(4*4*2)
+dim(Sigma) = c(4,4,2)
+Sigma[,,1] = diag(4)
+Sigma[,,2] = diag(4)
+p=matrix(0,2,2)
+p[,1] = c(3,2)
+
+res_d = MRCIVARDatam(n=4,p=p,T=2610,S=2,SESVI=1,TH=0,Sigmao=Sigma,type="const",r=1)
+res_e = MRCIVARestm(res=res_d)
+
+
+TH_v = c(0,0.1)
+L_v = c(6,6)
+plot(ts(res_d$Y))
+
+Selm = MRCIVAR_Select(res=res_e,L_V=L_v,TH_V=TH_v)
+Selm[which.min(Selm[,5]),]
+Selm[which.min(Selm[,4]),]
+MRVAR_Select_Summary(Selm)
+
+```
+
+The above codes show how model selection criteria can be used to assist the specification of the lag length in different regimes as well as the threshold values. The values of information criteria of the two-regime-CIVAR AIC and BIC are less than that of the one regime model ORAIC and ORBIC, which indicates that the two-regime-model is a more proper model for the data. The two arguments in the function MRCIVAR_Select: L_V and L_TH specify the maximum lag length of the two regimes and the threshold values over which the information criteria AIC and BIC will be calculated. MRVAR_Select_Summary is used to obtain the output of the minima of the information criteria.
+
+For empirical applications it is recommended to follow the steps below:
+
++ Use MRCIVARDatam to generate a MRCIVAR object.
++ Replace the generated model data with the empirical data.
++ Estimate the model with MRCIVARestm and test the cointegration rank.
++ Run a model selection procedure to determine the specification of the model.
++ Estimate the selected model.
++ Run the analysis.
+
+## GVAR/CIGVAR Models
+
+### GVAR
+
+A global vector autoregressive (GVAR) model in its country model form is:
+
+$$y_{i,t} =  c_{i}+\sum_{l=1}^{p_{i}}B_{i,l}y_{t-l}+\sum_{l=1}^{q_{i}}A_{i,l}y_{i,t-l}^{*}+\epsilon_{i}$$
+where $y_{i,t}$ is an $m$-vector of domestic variables and $y_{i,t}^{*}$ is the $m$-vector of foreign variables. $i=1,2,...,n$. $n$ is the number of countries. Stack all $n$ country models together we have the GVAR in its global form:
+$$
+Y_{t}=C+\sum_{l=1}^{P}G_{l}Y_{t-l}+\epsilon_t
+$$
+with $\epsilon_t \sim N(0,\Sigma)$, 
+$$
+Y_{t}=(y_{1,t}',y_{2,t}',...,y_{N,t}')'
+$$
+$$\epsilon_t=(\epsilon_{1,t}',\epsilon_{2,t}',...,\epsilon_{N,t}')'$$
+
+$$
+C=(c_{1}',c_{2}',...,c_{N}')'
+$$
+
+\[G_{l}  =  \left(\begin{array}{cccc}
+B_{1,l} & 0 & \dots & 0\\
+0 & B_{2,l} &  & \vdots\\
+\vdots &  & \ddots & 0\\
+0 & \dots & 0 & B_{N,l}
+\end{array}\right)+\left(\begin{array}{cccc}
+A_{1,l} & 0 & \dots & 0\\
+0 & A_{2,l} &  & \vdots\\
+\vdots &  & \ddots & 0\\
+0 & \dots & 0 & A_{N,l}
+\end{array}\right)\left(\begin{array}{cccc}
+0I_m & w_{1,2}I_m & \dots & w_{1,N}I_m\\
+w_{2,1}I_m & 0I_m & \ddots & w_{2,N}I_m\\
+\vdots & \ddots & \ddots & \vdots\\
+w_{N,1}I_m & \dots & w_{N,N-1}I_m & 0I_m
+\end{array}\right)
+\]
+The main functions for the class of global VAR models are:
+
++ GVARData
++ GVARest
++ GVAR_Select
++ summary_GVAR
++ irf_GVAR, irf_GVAR_CB1
+
+The following sample codes demonstrate how GVARData can be used as a data generating process to generate data from GVAR processes with a variety of specifications.
+
+
+```{GVARData}
+##### A case of m=2 variables, n=5 countries, domestice lag = 2, foreign lag = 1, and no exogenous variables
+
+n = 5
+p = (1:15)*0; dim(p) = c(5,3)
+p[,1] = 2; p[,2]=1;  p[1,2] = 2
+res_d = GVARData(m=2,n=5,p=p,T=100,type="const")
+max(res_d$Y)
+dim(res_d$Y)
+plot(res_d$Y[,1],type="l")
+lines(res_d$Y[,2],col="red")
+lines(res_d$Y[,3],col="blue")
+lines(res_d$Y[,4],col="green")
+
+```
+
+The output of GVARData is a GVAR object containing generated data and parameters as well as the residuals. The components of a generated MRVAR object correspond to the model variables and parameters as follows.
+
+res_d\$Y:      $(y_1,y_2,...,y_n)$
+
+res_d\$Uo:      $(\epsilon_1,\epsilon_2,...,\epsilon_N)$
+
+res_d\$Co:     $(c_1',c_2',c3',...,c_N')'$
+
+res_d\$Bo:      $B_{1,1},...,B_{1,p},B_{2,1},...,B_{2,p},...,B_{N,1},...B_{N,p}$
+
+res_d\$Ao:      $A_{1,1},...,A_{1,q},A_{2,1},...,A_{2,q},...,A_{N,1},...A_{N,q}$
+
+res_d\$C:        $C$
+
+res_d\$G:        $G_1,G_2,...,G_p$
+
+res_d\$Sigmao:   $\Sigma$
+
+res_d\$p:      $p$
+
+res_d\$W:        $W=\left(\begin{array}{cccc}
+0 & w_{1,2} & \dots & w_{1,N}\\
+w_{2,1} & 0 & \ddots & w_{2,N}\\
+\vdots & \ddots & \ddots & \vdots\\
+w_{N,1} & \dots & w_{N,N-1} & 0
+\end{array}\right)$
+
+The function GVARest is used to estimate the parameters of an object generated by GVARData. irf_GVAR and irf_GVAR_CB1 are used to generate the impulse response function of an estimated GVAR model.
+
+```{GVARest}
+res_e = GVARest(res = res_d)
+summary_GVAR(res_e)  # the summary needs to be detailes commented
+
+IRF = irf_GVAR(res_e,nstep=10,comb=NA,irf="gen")
+IRF_CB = irf_GVAR_CB1(res_e,nstep=10,comb=NA,irf="gen",runs=200,conf=c(0.05,0.95))
+
+
+par(mfrow=c(3,3))
+plott(IRF_CB,1,1)
+plott(IRF_CB,1,2)
+plott(IRF_CB,1,3)
+plott(IRF_CB,1,4)
+plott(IRF_CB,1,5)
+plott(IRF_CB,1,6)
+plott(IRF_CB,1,7)
+plott(IRF_CB,1,8)
+plott(IRF_CB,1,9)
+
+#### GVAR with exogenous variables and flexible country-wise specification of lags
+
+X1 = matrix(rnorm(200),200,1)
+X2 = matrix(rnorm(200),200,1)
+X3 = matrix(rnorm(200),200,1)
+X4 = matrix(rnorm(200),200,1)
+X  = cbind(X1,X2,X3,X4)
+dim(X) = c(200,1,4)
+n = 4
+p = (1:12)*0; dim(p) = c(4,3);p[,1] = 2; p[,2]=1;   p[,3]=1;
+p[2,2]=2;
+p
+res_d = GVARData(m=2,n=4,p=p,T=200,type="exog1",X=X)
+res_e = GVARest(res = res_d)
+summary_GVAR(res_e)  # the summary needs to be detailes commented
+```
+
+As the package allows country-wise specification of the lag length. Information criteria can be applied to the model country by country to obtain a proper specification of the lags in the GVAR model. GVAR_Select can be used to calculate the AIC and BIC information criteria for all possible lag combinations up to the maximum lag length given in L_V for country I.
+
+```{GVAR Select}
+#### specification through country-wise model selection
+n = 4
+p = (1:12)*0; dim(p) = c(4,3);p[,1] = 2; p[,2]=1; p[2:3,2] = 2
+res_d = GVARData(m=2,n=4,p=p,T=4000,type="const")
+
+I = 1
+L_V = c(4,4)
+res_d$p
+GVARSelect = GVAR_Select(res=res_d,L_V=c(4,4),I=2)
+GVARSelect[which.min(GVARSelect[,3]),]
+
+I = 2
+L_V = c(4,4)
+res_d$p
+GVARSelect = GVAR_Select(res=res_d,L_V=c(4,4),I=2)
+GVARSelect[which.min(GVARSelect[,3]),]
+
+
+I = 3
+L_V = c(4,4)
+res_d$p
+GVARSelect = GVAR_Select(res=res_d,L_V=c(4,4),I=2)
+GVARSelect[which.min(GVARSelect[,3]),]
+
+```
+For empirical applications it is recommended to follow the steps below:
+
++ Use GVARData to generate a GVAR object.
++ Replace the generated model data with the empirical data.
++ Run a model selection procedure to determine the specification of the model equation by equation.
++ Estimate the selected model.
++ Run the analysis.
+
+### CIGVAR
+
+
+An integrated global vector autoregressive (CIGVAR) model is a GVAR with unit roots in each country. Each county model is assumed to have a vector error correction form:
+
+$$\Delta y_{i,t} =  c_{i}+\alpha_i\beta_i'y_{t-1}  +\sum_{l=1}^{p_{i}-1}B^{*}_{i,l}\Delta y_{t-l}+\sum_{l=1}^{q_{i}}A_{i,l}\Delta y_{i,t-l}^{*}+\epsilon_{i}$$
+The country model in level of the variables:
+$$y_{i,t} =  c_{i}+\sum_{l=1}^{p_{i}}B_{i,l}y_{t-l}+\sum_{l=1}^{q_{i}}A_{i,l}y_{i,t-l}^{*}+\epsilon_{i}$$
+Stacking all $n$ country models together we have the GVAR in its global form:
+$$
+Y_{t}=C+\sum_{l=1}^{P}G_{l}Y_{t-l}+\epsilon_t
+$$
+with $\epsilon_t \sim N(0,\Sigma)$, 
+$$
+Y_{t}=(y_{1,t}',y_{2,t}',...,y_{N,t}')'
+$$
+$$\epsilon_t=(\epsilon_{1,t}',\epsilon_{2,t}',...,\epsilon_{N,t}')'$$
+
+$$
+C=(c_{1}',c_{2}',...,c_{N}')'
+$$
+
+\[G_{l}  =  \left(\begin{array}{cccc}
+B_{1,l} & 0 & \dots & 0\\
+0 & B_{2,l} &  & \vdots\\
+\vdots &  & \ddots & 0\\
+0 & \dots & 0 & B_{N,l}
+\end{array}\right)+\left(\begin{array}{cccc}
+A_{1,l} & 0 & \dots & 0\\
+0 & A_{2,l} &  & \vdots\\
+\vdots &  & \ddots & 0\\
+0 & \dots & 0 & A_{N,l}
+\end{array}\right)\left(\begin{array}{cccc}
+0I_m & w_{1,2}I_m & \dots & w_{1,N}I_m\\
+w_{2,1}I_m & 0I_m & \ddots & w_{2,N}I_m\\
+\vdots & \ddots & \ddots & \vdots\\
+w_{N,1}I_m & \dots & w_{N,N-1}I_m & 0I_m
+\end{array}\right)
+\]
+
+The main functions for the class of cointegrated global VAR models are 
+
++ CIGVARData, CIGVARData1
++ CIGVARest
++ CIGVAR_Select
++ irf_GVAR, irf_CIGVAR_CB
+
+The following sample codes demonstrate the use of these five functions.
+
+```{CIGVARData}
+
+n = 5
+p = (1:15)*0; dim(p) = c(5,3)
+p[,1] = 3; p[,2]=3;
+res_d = GVARData(m=2,n=5,p=p,T=100,type="const")
+
+r_npo = (1:(2 * 3 * 5))*0; dim(r_npo) = c(2,3,5)
+r_npo[,,1] = matrix(c(1,2,3,2,3,3),2,3)
+r_npo[,,2] = matrix(c(1,2,3,2,3,3),2,3)
+r_npo[,,3] = matrix(c(1,2,3,2,3,3),2,3)
+r_npo[,,4] = matrix(c(1,2,3,2,3,3),2,3)
+r_npo[,,5] = matrix(c(1,2,3,2,3,3),2,3)
+
+res_d = CIGVARData(m=2,n=5,p=p,T=500,r_npo=r_npo,type="const",d=0)
+max(res_d$Y)
+plot(ts(res_d$Y))
+
+res_e = CIGVARest(res_d)
+
+
+res_e$CRKtst
+res_e$VAR_domestic
+summary(res_e$VAR_domestic[[5]])
+
+#### unit roots on the GVAR
+STAT(res_e$G)
+
+```
+
+The output of CIGVARData is a CIGVAR object containing generated data and parameters as well as the residuals. The components of the generated MRVAR object correspond to the model variables and parameters as follows.
+
+res_d\$Y:      $(y_1,y_2,...,y_n)$
+
+res_d\$Uo:      $(\epsilon_1,\epsilon_2,...,\epsilon_N)$
+
+res_d\$Co:     $(c_1',c_2',c3',...,c_N')'$
+
+res_d\$Bo:      $B_{1,1},...,B_{1,p},B_{2,1},...,B_{2,p},...,B_{N,1},...B_{N,p}$
+
+res_d\$Ao:      $A_{1,1},...,A_{1,q},A_{2,1},...,A_{2,q},...,A_{N,1},...A_{N,q}$
+
+res_d\$C:        $C$
+
+res_d\$G:        $G_1,G_2,...,G_p$
+
+res_d\$Sigmao:   $\Sigma$
+
+res_d\$p:      $p$
+
+res_d\$W:        $W=\left(\begin{array}{cccc}
+0 & w_{1,2} & \dots & w_{1,N}\\
+w_{2,1} & 0 & \ddots & w_{2,N}\\
+\vdots & \ddots & \ddots & \vdots\\
+w_{N,1} & \dots & w_{N,N-1} & 0
+\end{array}\right)$
+
+STAT(res_d\$G) shows how many unit roots there are in the CIGVAR system. The function GVARest is used to estimate the parameters of the object generated by CIGVARData. res_e\$CRKtst shows the cointegration rank test for each country and summary(res_e\$VAR_domestic[[5]]) is use to show the estimation results of the fifth country.
+
+```{CIGVARest and selection}
+### possibility of country-specific lags
+res_d$p[1,2] = 2
+res_ee = CIGVARest(res_d)
+res_d$p[1,2] = 4
+res_eee = CIGVARest(res_d)
+
+res_e$AIC_g
+res_ee$AIC_g
+res_eee$AIC_g
+
+
+### Impulse response function
+
+IRF_CB = irf_CIGVAR_CB(res=res_e,nstep=20,comb=NA,irf="gen1",runs=200,conf=c(0.05,0.95))
+
+par(mfrow=c(3,3))
+plott(IRF_CB,1,1)
+plott(IRF_CB,1,2)
+plott(IRF_CB,1,3)
+plott(IRF_CB,1,4)
+plott(IRF_CB,1,5)
+plott(IRF_CB,1,6)
+plott(IRF_CB,1,7)
+plott(IRF_CB,1,8)
+plott(IRF_CB,1,9)
+
+
+#### country wise specification
+
+n = 5
+p = (1:15)*0; dim(p) = c(5,3)
+p[,1] = 2; p[,2]=2;
+p[3:4,1] = 3
+p
+r_npo = (1:(2 * 3 * 5))*0; dim(r_npo) = c(2,3,5)
+r_npo[,,1] = matrix(c(1,1.1,1.3,1.2,1.3,1.3),2,3)
+r_npo[,,2] = matrix(c(1,1.1,1.3,1.2,1.3,1.3),2,3)
+r_npo[,,3] = matrix(c(1,1.1,1.3,1.2,1.3,1.3),2,3)
+r_npo[,,4] = matrix(c(1,1.1,1.3,1.2,1.3,1.3),2,3)
+r_npo[,,5] = matrix(c(1,1.1,1.3,1.2,1.3,1.3),2,3)
+
+
+res_d = CIGVARData(m=2,n=5,p=p,T=500,r_npo=r_npo,type="const",d=0)
+res_e = CIGVARest(res_d)
+
+
+### model selection
+
+
+I = 1
+
+L_V = c(4,4)
+
+res = res_d
+#str(res_e)
+res=res_e
+
+CIGVARSelecte = CIGVAR_Select(res=res_d,L_V=c(4,4))
+CIGVARSelecte[which.min(CIGVARSelecte[,17]),]
+CIGVARSelecte[which.min(CIGVARSelecte[,19]),]
+pp = CIGVARSelecte[which.min(CIGVARSelecte[,19]),][1:(n*3)]
+dim(pp)=c(n,3)
+pp
+```
+The example above shows how GVAR_Select is used for the model selection. The data generating process has the lag length 2 for every country domestic variables and lag length 2 for foreign variables. In country 3 and country 4 the lag length for domestic variables is 3 respectively. The information criteria selected the correct specification.
+
+
+For empirical applications it is recommended to follow the steps below:
+
++ Use CIGVARData to generate a CIGVAR object.
++ Replace the generated model data with the empirical data.
++ Test the cointegration rank for each country/unit using CIGVARest
++ Respecify the model using CIGVARData with crk
++ Run a model selection procedure to determine the specification of the model.
++ Estimate the selected model.
++ Run the analysis.
+
+## MRGVAR/MRCIGVAR Models
+
+### MRGVAR
+
+A multi regime global autoregressive model (MRGVAR) is defined as follows.
+
+$$y_{i,t}  =  c_{i,S_{i,t}}+\sum_{l=1}^{p_{i,S_{i,t}}}B_{i,l,S_{i,t}}y_{t-l}+\sum_{l=1}^{q_{i,S_{i,t}}}A_{i,l,S_{i,t}}y_{i,t-l}^{*}+\epsilon_{i,S_{i,t}}
+$$ 
+where $y_{i,t}$ is an $m$-vector of domestic variables and $y_{i,t}^{*}$ is the $m$-vector of foreign variables. $i=1,2,...,n$. $n$ is the number of countries. $S_{i,t}$ is a state variable that indicates which state country $i$ at time $t$ is in. Stacking all $n$ country models together we have the MRGVAR in its global form:
+$$
+y_{t}=C_{S_{t}}+\sum_{l=1}^{p}G_{l,S_{t}}y_{t-l}+\epsilon_{S_{t}}
+$$
+with $\epsilon_{S_{t}}\sim N(0,\Sigma_{S_{t}})$
+
+$$y_{t}=(y_{1,t}',y_{2,t}',...,y_{N,t}')'$$
+
+$$\epsilon_{S_{t}}=(\epsilon_{1,S_{1,t}}',\epsilon_{2,S_{2,t}}',...,\epsilon_{N,S_{N,t}}')'$$
+$$C_{S_{t}}=(c_{1,S_{1,t}}',c_{2,S_{2,t}}',...,c_{N,S_{N,t}}')'$$
+$$G_{l,S_{t}} =  \left(\begin{array}{cccc}
+A_{1,l,S_{1,t}} & 0 & \dots & 0\\
+0 & A_{2,l,S_{2,t}} &  & \vdots\\
+\vdots &  & \ddots & 0\\
+0 & \dots & 0 & A_{N,l,S_{N,t}}
+\end{array}\right)+\left(\begin{array}{cccc}
+A_{1,l,S_{1,t}}^{*} & 0 & \dots & 0\\
+0 & A_{2,l,S_{2,t}}^{*} &  & \vdots\\
+\vdots &  & \ddots & 0\\
+0 & \dots & 0 & A_{N,l,S_{N,t}}^{*}
+\end{array}\right)\left(\begin{array}{cccc}
+0I_m & w_{1,2}I_m & \dots & w_{1,N}I_m\\
+w_{2,1}I_m & 0I_m & \ddots & w_{2,N}I_m\\
+\vdots & \ddots & \ddots & \vdots\\
+w_{N,1}I_m & \dots & w_{N,N-1}I_m & 0I_m
+\end{array}\right)
+$$
+
+The main functions for this class of models are 
+
++ MRGVARData
++ MRGVARest
++ MRGVAR_Select
++ irf_MRGVAR, irf_MRGVAR_CB1
+
+The following sample codes demonstrate MRGVARData can be used as a data generating process to generate data from MRGVAR processes with a variety of specifications.
+```{MRGVARDatA}
+
+?MRGVARData
+?MRGVARest
+?MRGVAR_Select
+?irf_MRGVAR
+?irf_MRGVAR_CB1
+
+## case of n = 2, m = 2, S = 2 #m: number of variables, n: number of countries
+p = rep(1,12); dim(p) = c(2,3,2)
+p[1,1,2] = 2; p[2,2,2]=2; p[,3,] = 0
+TH = c(1:2)*0; dim(TH) = c(1,2)
+res_d <- MRGVARData(m=2,n=2,p=p,TH=TH,T=2000,S=2,SESVI=c(1,3))
+max(res_d$Y)
+res_d$TH
+### estimation of the MRGVAR model
+res_e = MRGVARest(res=res_d)
+summary_MRGVAR(res_e)
+```
+
+The output of MRGVARData is a MRGVAR object containing generated data and parameters as well as the residuals. The components of a generated MRVAR object correspond to the model variables and parameters as follows.
+
+res_d\$Y:      $(y_1,y_2,...,y_n)$
+
+res_d\$Uo:      $(\epsilon_{1,S=1},\epsilon_{2,S=1},...,\epsilon_{N.S=1})$, $(\epsilon_{1,S=2},\epsilon_{2,S=2}...,\epsilon_{N,S=2})$
+
+res_d\$Co:     $(c_{1,S=1}',c_{2,S=1}',c_{3,S=1}',...,c_{N,S=1}')',(c_{1,S=2}',c_{2,S=2}',c_{3,S=2}',...,c_{N,S=2}')'$
+
+res_d\$Bo:      $(B_{1,1,S=1},...,B_{1,p,S=1},B_{2,1,S=1},...,B_{2,p,S=1},...,B_{N,1,S=1},...B_{N,p,S=1},
+                  B_{1,1,S=2},...,B_{1,p,S=2},B_{2,1,S=2},......B_{N,p,S=2})$
+
+res_d\$Ao:      $(A_{1,1,S=1},...,A_{1,p,S=1},A_{2,1,S=1},...,A_{2,p,S=1},...,A_{N,1,S=1},...A_{N,p,S=1},
+                  A_{1,1,S=2},...,A_{1,p,S=2},A_{2,1,S=2},......A_{N,p,S=2})$
+
+res_d\$C:       $C_{S=1},C_{S=2}$
+
+res_d\$G:       $G_{1,S=1},G_{2,S=1},...,G_{p,S=1}$, $G_{1,S=2},G_{2,S=2},...,G_{p,S=2}$
+
+res_d\$Sigmao:  $\Sigma_{S=(1,1,...,1)},\Sigma_{S=(2,2,...,2)}$
+
+res_d$TH:       $(\tau_1,\tau_2,...,\tau_n)$
+
+res_d\$p:       $p$
+
+res_d\$W:        $W=\left(\begin{array}{cccc}
+0 & w_{1,2} & \dots & w_{1,N}\\
+w_{2,1} & 0 & \ddots & w_{2,N}\\
+\vdots & \ddots & \ddots & \vdots\\
+w_{N,1} & \dots & w_{N,N-1} & 0
+\end{array}\right)$
+
+
+The function MRGVARest is used to estimate the parameters of the object generated data by MRGVARData. irf_MRGVAR_CB1 is used to generate the impulse response functions of the estimated MRGVAR model.
+
+```{MRGVARs}
+## case of n = 5, m =3, S = 2 #m: number of variables, n: number of countries
+p = c(2,2,2,2,2,2,2,2,2,2,0,0,0,0,0,2,2,2,2,2,2,2,2,2,2,0,0,0,0,0); dim(p) = c(5,3,2)
+res_dd <- MRGVARData(m=3,n=5,p=p,T=100,S=2,SESVI=((1:5)*3-2))
+max(abs(res_dd$Y))
+##Ao=res_dd$Ao
+##Bo=res_dd$Bo
+#res_d <- MRGVARData(m=3,n=5,p=p,T=500,S=2,SESVI=((1:5)*3-2),Ao=Ao,Bo=Bo)
+res_d$type
+max(abs(res_d$Y)) #to check stationarity
+res_e = MRGVARest(res=res_dd)
+summary_MRGVAR(res_e)
+IRFF2 = irf_MRGVAR(res=res_e,nstep=10,comb=NA,state=c(2,2,2,2,2),irf='gen')
+plot(IRFF2[1,1,],type="l")
+
+
+IRF  = irf_MRGVAR_CB1(res=res_e,nstep=10,comb=NA,state=c(2,2,2,2,2),irf="gen1",runs=20,conf=c(0.05,0.95))
+#### under the assumption of stationarity the IRF can be calculated.
+x11()
+par(mfrow=c(4,4))
+plott(IRF[[1]],1,1)
+plott(IRF[[1]],1,2)
+plott(IRF[[1]],1,3)
+plott(IRF[[1]],1,4)
+plott(IRF[[1]],1,5)
+plott(IRF[[1]],1,6)
+plott(IRF[[1]],1,7)
+plott(IRF[[1]],1,8)
+plott(IRF[[1]],1,9)
+plott(IRF[[1]],1,10)
+plott(IRF[[1]],1,11)
+plott(IRF[[1]],1,12)
+plott(IRF[[1]],1,13)
+plott(IRF[[1]],1,14)
+plott(IRF[[1]],1,15)
+plott(IRF[[1]],2,1)
+
+
+
+# check the roots of the regime specific characteristic equations
+STAT(res_dd$Go[,,,1])
+STAT(res_dd$Go[,,,2])
+
+STAT(res_e$Go[,,,1])
+STAT(res_e$Go[,,,2])
+```
+The following  example shows how MRGVAR_Select is used for model specification. The data generating process has the lag length (1 1 2 1) for the first country, (2 1 1 1) for the second country and (1 1 2,1) for the third country, the first two numbers are the lag lengths of domestic and foreign variables of the first regime respectively; the second two numbers are those for the second regime. L_v = (3,3,3,3) gives the search range for lag length up to 3. TH_v = c(-0.1, -0.05, 0,0.05, 0.1 ) gives 5 possible threshold values.
+
+```{MRGVAR}
+
+############ MRGVAR_select
+
+## case of n = 5, m =3, S = 2 #m: number of variables, n: number of countries
+p = c(2,2,2,2,2,2,2,2,2,2,0,0,0,0,0,2,2,2,2,2,2,2,2,2,2,0,0,0,0,0); dim(p) = c(5,3,2)
+p[,2,] = 1; p[1,1,1] = 1; p[3,1,1] = 1; p[2,1,2] = 1
+
+TH = c(1:5)*0; dim(TH) = c(1,5)
+res_dd <- MRGVARData(m=3,n=5,p=p,TH =TH,T=100,S=2,SESVI=((1:5)*3-2))
+max(abs(res_dd$Y))		# to make sure it is not explosive
+##Ao=res_dd$Ao
+##Bo=res_dd$Bo
+res_d <- MRGVARData(m=3,n=5,p=p,TH= TH, T=2000,S=2,SESVI=((1:5)*3-2),Ao=Ao,Bo=Bo)
+res_d$type
+max(abs(res_d$Y)) #to check stationarity
+res_e = MRGVARest(res=res_d)
+#summary_MRGVAR(res_e)
+
+res_dd$TH
+### four numbers for the maxima lag length in counttry I: regime 1: (domesti foreign regime 2: domestic and foreign)
+L_v  = c(3,3,3,3)
+### a vector eontaining possible threhsold values
+TH_v = c(-0.1, -0.05, 0,0.05, 0.1  )
+
+
+CC = MRGVAR_Select(res=res_dd,I=1,L_V=L_v,TH_V=TH_v)
+CCC = CC[[1]]
+
+CCC[which.min(CCC[,9]),]
+CCC[which.min(CCC[,18]),]
+
+
+CC = MRGVAR_Select(res=res_dd,I=2,L_V=L_v,TH_V=TH_v)
+CCC = CC[[1]]
+
+CCC[which.min(CCC[,9]),]
+CCC[which.min(CCC[,18]),]
+
+
+CC = MRGVAR_Select(res=res_dd,I=3,L_V=L_v,TH_V=TH_v)
+CCC = CC[[1]]
+
+CCC[which.min(CCC[,9]),]
+CCC[which.min(CCC[,18]),]
+
+
+```
+
+For empirical applications it is recommended to follow the steps below:
+
++ Use MRGVARData to generate a MRGVAR object.
++ Replace the generated model data with the empirical data.
++ Run a model selection procedure to determine the specification of the model.
++ Estimate the selected model.
++ Run the analysis.
+
+### MRCIGVAR
+
+ 
+An multi regime integrated global vector autoregressive (MRCIGVAR) model is a MRGVAR with unit roots in every country. Each county model is assumed to have a vector error correction form:
+
+$$\Delta y_{i,t} =  c_{i,S_{i,t}}+\alpha_{i,S_{i,t}}\beta_i'y_{t-1}  +\sum_{l=1}^{p_{i}-1}B^{*}_{i,l,S_{i,t}}\Delta y_{t-l}+\sum_{l=1}^{q_{i}}A^{*}_{i,l,S_{i,t}}\Delta y_{i,t-l}^{*}+\epsilon_{i,S_{i,t}}$$
+where $y_{i,t}$ is an $m$-vector of domestic variables and $y_{i,t}^{*}$ is the $m$-vector of foreign variables. $i=1,2,...,n$. $n$ is the number of countries. $S_{i,t}$ is a state variable that indicates which state country $i$ at time $t$ is in. $S_{i,t}=1$ for $f_{1,t-d} \le \tau_i.$ and $S_{i,t}=2$ for $f_{1,t-d} > \tau_i$. The country model in level of the variables is:
+
+$$y_{i,t}  =  c_{i,S_{i,t}}+\sum_{l=1}^{p_{i,S_{i,t}}}B_{i,l,S_{i,t}}y_{t-l}+\sum_{l=1}^{q_{i,S_{i,t}}}A_{i,l,S_{i,t}}y_{i,t-l}^{*}+\epsilon_{i,S_{i,t}}
+$$ 
+Stacking all $n$ country models together we have the GVAR in its global form:
+$$
+y_{t}=c_{S_{t}}+\sum_{l=1}^{P}G_{l,S_{t}}y_{t-l}+\epsilon_{S_{t}}
+$$
+with $\epsilon_{S_{t}}\sim N(0,\Sigma_{S_{t}})$
+
+$$y_{t}=(y_{1,t}',y_{2,t}',...,y_{N,t}')'$$
+
+$$\epsilon_{S_{t}}=(\epsilon_{1,S_{1,t}}',\epsilon_{2,S_{2,t}}',...,\epsilon_{N,S_{N,t}}')'$$
+$$c_{S_{t}}=(c_{1,S_{1,t}}',c_{2,S_{2,t}}',...,c_{N,S_{N,t}}')'$$
+$$G_{l,S_{t}} =  \left(\begin{array}{cccc}
+A_{1,l,S_{1,t}} & 0 & \dots & 0\\
+0 & A_{2,l,S_{2,t}} &  & \vdots\\
+\vdots &  & \ddots & 0\\
+0 & \dots & 0 & A_{N,l,S_{N,t}}
+\end{array}\right)+\left(\begin{array}{cccc}
+A_{1,l,S_{1,t}}^{*} & 0 & \dots & 0\\
+0 & A_{2,l,S_{2,t}}^{*} &  & \vdots\\
+\vdots &  & \ddots & 0\\
+0 & \dots & 0 & A_{N,l,S_{N,t}}^{*}
+\end{array}\right)\left(\begin{array}{cccc}
+0I_m & w_{1,2}I_m & \dots & w_{1,N}I_m\\
+w_{2,1}I_m & 0I_m & \ddots & w_{2,N}I_m\\
+\vdots & \ddots & \ddots & \vdots\\
+w_{N,1}I_m & \dots & w_{N,N-1}I_m & 0I_m
+\end{array}\right)
+$$
+
+
+The main functions for this class of models are
+
++ MRCIGVARData,
++ MRCIGVARest, MRCIVARestm
++ MRCIGVAR_Select
++ irf_MRCIGVAR, irf_MRCIGVAR_CB
+
+
+The following sample codes demonstrate MRCIGVARData can be used as a data generating process to generate data from MRCIGVAR processes with a variety of specifications. MRCIGVARest estimates the parameters in an MRCIGVAR object.  MRCIGVAR_Select can be used to select the model specification of a MRCIGVAR model.
+
+```{MRCIGVARData}
+
+?MRCIGVARData
+?MRCIGVARestm
+
+
+#### for MRCIGVAR
+m = 2
+n = 3
+p = c(2,2,2,2,2,2,2,2,2,2,0,0,0,0,0,2,2,2,2,2,2,2,2,2,2,0,0,0,0,0); dim(p) = c(5,3,2)
+p = p[1:n,,]; p[,1,] = 2; p[,2,] = 2
+
+TH = c(1:n)*0; dim(TH) = c(1,n)
+SESVI=rep(1,3,5)
+r  = rep(1,n)
+i = 1
+S = 2
+
+## case of n = 3, m = 2, S = 2
+
+res_d <- MRCIGVARData(m=2,n=3,p=p,TH=TH,T=200,S=2, SESVI=c(1,3,5),r=rep(1,3),Ncommtrend=1)    ## m: number of variables, n: number of countries
+
+max(abs(res_d$Y))
+plot(ts(res_d$Y))
+STAT(res_d$Go[,,,2])
+STAT(res_d$Go[,,,1])
+max(abs(res_d$Y))
+#Bo = res_d$Bo
+#Ao = res_d$Ao
+#res_d <- MRCIGVARData1(m=2,n=3,p=p,TH=TH,T=20000,S=2, SESVI=c(1,3,5),Bo=Bo,Ao=Ao,r=rep(1,3))    ## m: number of variables, n: number of countries
+max(res_d$Y)
+plot(ts(res_d$Y))
+res_e  = MRCIGVARest(res=res_d)
+
+res_e$CRK_tst
+```
+
+The output of MRCIGVARData is a MRCIGVAR object containing generated data and parameters as well as the residuals. The components of a generated MRVAR object correspond to the model variables and parameters as follows.
+
+
+
+res_d\$Y:      $(y_1,y_2,...,y_n)$
+
+res_d\$Uo:      $(\epsilon_{1,S=1},\epsilon_{2,S=1},...,\epsilon_{N.S=1})$, $(\epsilon_{1,S=2},\epsilon_{2,S=2}...,\epsilon_{N,S=2})$
+
+res_d\$Co:     $(c_{1,S=1}',c_{2,S=1}',c_{3,S=1}',...,c_{N,S=1}')',(c_{1,S=2}',c_{2,S=2}',c_{3,S=2}',...,c_{N,S=2}')'$
+
+res_d\$Bo:      $(B_{1,1,S=1},...,B_{1,p,S=1},B_{2,1,S=1},...,B_{2,p,S=1},...,B_{N,1,S=1},...B_{N,p,S=1},
+                  B_{1,1,S=2},...,B_{1,p,S=2},B_{2,1,S=2},......B_{N,p,S=2})$
+
+res_d\$Ao:      $(A_{1,1,S=1},...,A_{1,p,S=1},A_{2,1,S=1},...,A_{2,p,S=1},...,A_{N,1,S=1},...A_{N,p,S=1},
+                  A_{1,1,S=2},...,A_{1,p,S=2},A_{2,1,S=2},......A_{N,p,S=2})$
+
+res_d\$C:       $C_{S=1},C_{S=2}$
+
+res_d\$G:       $G_{1,S=1},G_{2,S=1},...,G_{p,S=1}$, $G_{1,S=2},G_{2,S=2},...,G_{p,S=2}$
+
+res_d\$Sigmao:  $\Sigma_{S=(1,1,...,1)},\Sigma_{S=(2,2,...,2)}$
+
+res_d$TH:       $(\tau_1,\tau_2,...,\tau_n)$
+
+res_d\$p:       $p$
+
+res_d\$W:        $W=\left(\begin{array}{cccc}
+0 & w_{1,2} & \dots & w_{1,N}\\
+w_{2,1} & 0 & \ddots & w_{2,N}\\
+\vdots & \ddots & \ddots & \vdots\\
+w_{N,1} & \dots & w_{N,N-1} & 0
+\end{array}\right)$
+
+
+MRCIGVARest and MRCIGVARestm are used to estimate models with identical and different adjustment speed coefficients respectively.
+
+```{MRCIGVARest}
+res_e  = MRCIGVARest(res=res_d)
+
+res_em = MRCIGVARestm(res=res_d)
+
+summary(res_e$VAR_domestic[[1]])
+
+summary(res_em$VAR_domestic[[1]])
+
+```
+
+For empirical applications it is recommended to follow the steps below:
+
++ Use MRCIGVARData to generate a MRCIGVAR object.
++ Replace the generated model data with the empirical data.
++ Test the cointegration rank for each country/unit using MRCIGVARest
++ Respecify the model using CIGVARData with crk
++ Run a model selection procedure to determine the specification of the model with respect to lag length and threshold values.
++ Estimate the selected model.
++ Run the analysis.
+
+# Generalized Impulse Response Functions of GVAR, CIGVAR, MRGVAR and MRCIGVAR (preliminary)
+
+In GVAR, CIGVAR, MRGVAR and MRCIGVAR conventionally generalized impulse response functions [^3]
+
+[^3]: H. Pesarana and Y. Shin （1998）for more details of the generalized impulse response function. 
+
++ country shocks
++ global shocks
++ regional shocks
++ coordinated actions
++ global responses
++ regional responses
+
+The option comb and comb1 in the impulse response function for these 4 classes of models provide the possibilities to calculate global shocks, regional shocks, coordinated actions and generate the responses of the system.
+
+### Global Shocks
+
+A global shock is defined as the weighted average of shocks of all countries in the same variable [^5] 
+
+[^5]: M. Greenwood-Nimmo, V. Nguyen, and Y. Shin (2013) for more details of impulse response funcions in GVAR models. 
+
+Using the weightings which are used in the construction of the foreign variables in each countries, we
+can defined a global financial stress shock in state S: $v_{t,S}^{gf}=(w_{1},0,w_{2},0,...,w_{N},0)\epsilon_{t,S}$
+with $\sum_{i=1}^{N}w_{i}=1$. Denoting $w'=(w_{1},0,w_{2},0,...,w_{N},0)$, we have $v_{t,S}^{gf}=w'\epsilon_{t,S}$ 
+and the standard error of the global financial shock is   
+$\sqrt{w'\Sigma_{S}w}$.
+
+Following Chudik and Pesaran (2018), the generalized impulse response function to a one standard error
+global financial shock is given by:
+$$\mbox{irf}(h,y|v_{t,S}^{gf}) = E\big(y_{t+h}|v_{t,S}^{fg}=\sqrt{w'\Sigma_{S}w},\Omega_{t-1}\big)-E(y_{t+h}|\Omega_{t-1}) =  \frac{R_{h}\Sigma_{S}w}{\sqrt{w'\Sigma_{S}w}}
+$$
+where $R_{h}$ are obtained recursively as
+
+\[
+R_{h}=\sum_{l=1}^{p}G_{l,S}R_{h-1}\mbox{ with }R_{0}=I\mbox{ and }R_{l}=0\mbox{ for }j<0,
+\]
+$\Omega_{t}$ contains all information available up to time $t$. For time period $t$ the simultaneous response is
+\[
+\mbox{irf}(0,y,v_{t,S}^{gf})=\frac{\Sigma_{S}w}{\sqrt{w'\Sigma_{S}w}}
+\]
+
+
+### Regional Shocks 
+
+In a similar way we can construct regional shocks through appropriate choices of the weightings. For a euro-zone financial stress shock, all the weightings that correspond to non-euro-zone countries are set to be zero, only the weightings that corresponds to the financial stress variables of the euro-zone countries are positive. These positive weightings have to be renormalized so that they sum up to unit. In this context a country shock is a particular case of a regional shock, where the region consists of only that country. 
+
+
+### Coordinated Policy Actions 
+
+We define concerted financial stress shocks (interpreted as monetary
+policy shocks) in state $S$: $v_{t,S}^{cf}=(v_{1},0,v_{3},0,...,v_{2N-1},0)$,
+where $v_{i}$ is the scale of the financial stress shock $\epsilon_{i,t}$.
+Following the idea of generalized impulse response function, we define
+the impulse response function for concerted shocks as follows
+
+\begin{eqnarray*}
+%\nonumbertoremovenumbering(beforeeachequation)
+\mbox{irf}(h,y|v_{t,S}^{cf}) & = & E\big(y_{t+h}|\epsilon_{1,t}=v_{1},\epsilon_{2,t}=v_{2},\epsilon_{n,t}=v_{n},\Omega_{t-1})-E(y_{t+h}|\Omega_{t-1})\\
+ & = & R_{h}\mbox{irf}(0,y|v_{t,S}^{cf})
+\end{eqnarray*}
+where $R_{h}$ are obtained recursively as
+\[
+R_{h}=\sum_{l=1}^{p}G_{l,S}R_{h-1}\mbox{ with }R_{0}=I\mbox{ and }R_{l}=0\mbox{ for }j<0,
+\]
+
+Defining the impulse response function in this way, the simultaneous
+response of $y_{i,t}$ to the concerted shock $v_{t,S}^{cf}$ is the
+sum of conditional expected value of $\epsilon_{i,t}$ given concerted
+shocks of other countries plus the shock of the own country\footnote{For more details of the calculation of the impulse response function of concerted shocks see Appendix in \cite{chensemmler}}.
+
+### Global effects and reginal effects
+
+The global effect of a policy shock can be evaluated as a linear combination of each country's response to the shock (see Greenwood, Nguyen and Shin (2013) for this type of applications.).  Using the same weights which are used to construct the global shocks, we can calculate the global effects of a policy shock, which can be a global shock or a coordinated policy shock.
+
+
+```{Global shocks and reginal shocks IRFs}
+
+p   = DDD$p
+res_d   <- MRGVARData(m=2,n=15,p=p,T=370,S=2,SESVI=c((1:15)*2-1),type="const")
+res_d$Y = DDD$Y
+res_d$W = DDD$Wmat
+res_d$TH = matrix(DDD$TH_jp,1,15)
+res_e   <- MRGVARest(res_d)
+
+#max(abs((res_e$Go[,,1,1]-EST$PARAM$Gn[1:30,1:30,2])))
+#res_e$resid[,(1:15)*2-1,1]+res_e$resid[,(1:15)*2,2]-EST$PARAM$resid[,,1]
+
+res_d = MRGVARDataR(res=res_e)
+
+#############################################################
+################## generalised IRF of the empirical model
+
+
+IRF  = irf_MRGVAR(res=res_e,nstep=20,comb=NA,state=rep(2,15),irf="gen1")
+
+#IRF11 = PRP1[[1]][,,,1]
+#max(abs(IRF-IRF11))
+
+IRFC  = irf_MRGVAR_CB1(res=res_e,nstep=20,comb=NA,state=rep(2,15),irf="gen1",runs=20,conf=c(0.05,0.95),NT=1)
+
+x11()  # FSI responses to USA FSI shock
+plot35(IRFC[[2]],c(1:15)*2-1,(c(4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4)/4+0),c(-10,10),c(-10,10))
+x11()  # FSI responses to USA IP shock
+plot35(IRFC[[2]],c(1:15)*2-1,(c(4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4)/4+1),c(-10,10),c(-10,10))
+
+
+```
+Different types of the impulse response function are listed below
+
+  + irf = "gen": generalised impulse response function with one standard deviation shock
+  + irf = "gen1": generalised impulse response function with one unit shock
+  + irf = "genN1": generalised impulse response function with a negative one unit shock
+  + irf = "chol": Cholesky decomposition with on standard deviation shock
+  + irf = "chol1": Cholesky decomposition with one unit shock
+  + irf = "PTdecom": permanent and transitory decomposition for cointegrated system. In this case option G has to be used.
+
+For the types listed above option comb can be empty or NA. To generated a global or a regional shock or a concerted policy action the following type of irf options can be used
+
++ irf = "consert0": this type is applied with a weighting vector in a column of the $n \times n$ matrix comb to generate the coordinated policy action. The shocks are scaled in standard deviations
+ + irf = "concert1": this type is applied with a weighting vector in a column of the $n \times n$ matrix comb to generate the coordinated policy action. The shocks are scaled in units,
++ irf = "concertc": this type is applied with a weighting vector in a column of the $n \times n$ matrix comb to generate the coordinated policy action.
++ irf = "comb": this is used together with the GVAR weighting matrix to create the global, regional or country specific shock. The weights in the column of comb must sum up tp one. The shocks are scaled in standard deviations.
++ irf = "comb1": this is used together with the GVAR weighting matrix to create the global, regional or country specific shock. The weights in the column of comb must sum up tp one. The shocks are scaled in standard deviations.
+
+
+```{IRFUSE}
+
+######## The following weighting vector are taken from the MRGVAR weighting matrix to form global and regional weights.
+#######################################################################################################
+# c("BEL","AUT","NLD","NOR","SWE","FIN","DNK","CAN","ESP","ITA","GBR","FRA","DEU","JPN","USA")
+#### global and reginal shocks
+
+SW   = c(16768,     4919, 3730, 2806, 2678, 2149,   1393,   1826, 313, 267, 579, 512, 428,  524 ,853 )
+SWEU = c(16768*0,   4919*0, 3730, 2806, 2678*0, 2149,   1393,   1826*0, 313*0, 267, 579*0, 512*0, 428,  524 ,853 )
+
+SWnorth = c(16768*0,4919*0,3730*0,2806*0,2678*0,2149*0,1393*0,1826*0,313*1,267*1,579*1,512*1,428*0,524*0,853*0 )
+SWsouth = c(16768*0,4919*0,3730*0,2806*0,2678*0,2149*1,1393*1,1826*0,313*0,267*0,579*0,512*0,428*0,524*0,853*0 )
+SWameri = c(16768*1,4919*0,3730*0,2806*0,2678*0,2149*0,1393*0,1826*1,313*0,267*0,579*0,512*0,428*0,524*0,853*0 )
+
+comb_f = SW2comb(SW,15,2,1)
+comb_i = SW2comb(SW,15,2,2)
+comb_eu_f =  SW2comb(SWEU,15,2,1)
+comb_eu_i =  SW2comb(SWEU,15,2,2)
+comb_nt_f =  SW2comb(SWnorth,15,2,1)
+comb_nt_i =  SW2comb(SWnorth,15,2,2)
+comb_st_f =  SW2comb(SWsouth,15,2,1)
+comb_st_i =  SW2comb(SWsouth,15,2,2)
+comb_am_f =  SW2comb(SWameri,15,2,1)
+comb_am_i =  SW2comb(SWameri,15,2,2)
+
+comb_all = comb_f*0
+comb_all[,1]  = comb_f[,1]
+comb_all[,2]  = comb_i[,1]
+comb_all[,3]  = comb_eu_f[,1]
+comb_all[,4]  = comb_eu_i[,1]
+comb_all[,5]  = comb_nt_f[,1]
+comb_all[,6]  = comb_nt_i[,1]
+comb_all[,7]  = comb_st_f[,1]
+comb_all[,8]  = comb_st_i[,1]
+comb_all[,9]  = comb_am_f[,1]
+comb_all[,10] = comb_am_i[,1]
+colSums(comb_all)
+glw = comb_all[,1:2]
+
+
+###  global and regional shocks  #################
+### Note that the first two columns of comb_all generate a global FSI shock and an IP shock respectively.
+### The third and the fourth columns generate an EU FSI and an EU IP shock respectively.
+### Then the fifth and sixth columns the north Europe shocks and so on.
+
+
+IRFC  = irf_MRGVAR_CB1(res=res_e,nstep=20,comb=comb_all,state=rep(2,15),irf="comb1",runs=20,conf=c(0.05,0.95),NT=1)
+
+ACCbootconfcombHH = IRFC[[2]]
+
+x11()  # FSI responses to a global one unit FSI shock
+plot35(ACCbootconfcombHH,c(1:15)*2-1,(c(4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4)/4+0),c(-10,10),c(-10,10))
+x11()  # IP responses to a global one unit FSI  shock
+plot35(ACCbootconfcombHH,c(1:15)*2,(c(4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4)/4+0),c(-10,10),c(-10,10))
+
+x11()  # FSI responses to a EU one unit FSI shock
+plot35(ACCbootconfcombHH,c(1:15)*2-1,(c(4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4)/4+2),c(-10,10),c(-10,10))
+x11()  # IP responses to a EU one unit FSI  shock
+plot35(ACCbootconfcombHH,c(1:15)*2,(c(4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4)/4+2),c(-10,10),c(-10,10))
+
+x11()  # FSI responses to a global one unit IP shock
+plot35(ACCbootconfcombHH,c(1:15)*2-1,(c(4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4)/4+1),c(-10,10),c(-10,10))
+x11()  # IP responses to a global one unit IP  shock
+plot35(ACCbootconfcombHH,c(1:15)*2,(c(4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4)/4+1),c(-10,10),c(-10,10))
+
+
+
+###############################################################################
+#############   country specific negatively scaled shocks
+
+Countryshock = matrix(0,30,30)
+for (i in 1:15) Countryshock[2*i-1,2*i-1]=-1.5
+for (i in 1:15) Countryshock[2*i,2*i]= 2.5
+
+IRFC  = irf_MRGVAR_CB1(res=res_e,nstep=20,comb=Countryshock,state=rep(2,15),irf="comb1",runs=20,conf=c(0.05,0.95),NT=1)
+
+x11()  # FSI responses to USA scaled FSI shock (-1.5)
+plot35(IRFC[[2]],c(1:15)*2-1,(c(4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4)/4+0),c(-10,10),c(-10,10))
+x11()  # FSI responses to USA scaled IP shock  (2.5)
+plot35(IRFC[[2]],c(1:15)*2-1,(c(4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4)/4+1),c(-10,10),c(-10,10))
+
+
+###########################################################################
+###  concerted policy action IRF
+###########################################################################
+
+### concertA matrix specifies different degrees of the concerted actions
+concertedA = matrix(0,30,30)
+for (i in 1:15 ) for ( j in 1:10 )   concertedA[2*i-1,j] = -1+(j-1)*0.1
+
+### Using irf = "concert0", "concert1" or "concertc" together with comb = concertedA that is a (30 x 30)
+### matrix specifying the intensity of the concerted actions, the IRF of
+### coordinated policy actions can be generated.
+
+
+IRF  = irf_MRGVAR(res=res_e,nstep=20,comb=concertedA,state=rep(2,15),irf="concertc")
+
+IRFC = irf_MRGVAR_CB1(res=res_e,nstep=20,comb=concertedA,state=rep(2,15),irf="concertc",runs=20,conf=c(0.05,0.95),NT=1)
+
+x11()  # FSI responses to concerted actions in FSI (1: each country with one unit)
+plot35(IRFC[[2]],c(1:15)*2-1,(c(4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4)/4+0),c(-10,10),c(-10,10))
+x11()  # FSI responses to concerted actions in FSI (2: each country with 0.9 unit)
+plot35(IRFC[[2]],c(1:15)*2-1,(c(4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4)/4+1),c(-10,10),c(-10,10))
+
+
+```
+
+
+
+
+The example above illustrate how on the shock side we can aggregate different shock. With the weighting matrix comb_all we can also aggregate on the response site to obtain global and reginal responses.
+
+```{global responses}
+
+###### global and reginal responses to concerted actions
+### The matrix concertA specifies different degrees of the concerted actions.
+concertedA = matrix(0,30,30)
+for (i in 1:15 ) for ( j in 1:10 )   concertedA[2*i-1,j] = -1+(j-1)*0.1
+### Using with irf = "concert", "concert1" or "concertc" together withcomb =  concertedA
+### that is a 30 by 30 matrix specifying the intensity of the concerted actions, the IRF of
+### coordinated actions can be generated.
+
+
+IRF  = irf_MRGVAR(res=res_e,nstep=20,comb=concertedA,state=rep(2,15),irf="concertc")
+
+IRFC = irf_MRGVAR_CB1(res=res_e,nstep=20,comb=concertedA,state=rep(2,15),irf="concertc",runs=20,conf=c(0.05,0.95),NT=1)
+
+x11()  # FSI responses to concerted actions in FSI (1: each country with one unit)
+plot35(IRFC[[2]],c(1:15)*2-1,(c(4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4)/4+0),c(-10,10),c(-10,10))
+x11()  # FSI responses to concerted actions in FSI (2: each country with 0.9 unit)
+plot35(IRFC[[2]],c(1:15)*2-1,(c(4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4)/4+1),c(-10,10),c(-10,10))
+
+
+nstep = 20
+N = 15
+n = 2
+nrun = 20
+glresp = 4
+globalbootarray = c(1:(nrun*glresp*n*N*nstep))*0
+dim(globalbootarray) = c(glresp,n*N,nstep,nrun)
+globalbootconf = c(1:(3*glresp*n*N*nstep))*0
+dim(globalbootconf) = c(glresp,n*N,nstep,3)
+
+
+#### global and regional responses to the concerted actions
+bootarray = IRFC[[8]]
+ProbCV = globalbootconf*0
+for (m in 1:glresp)       {
+   for (j in 1:(n*N))     {
+      for (k in 1:nstep ) {
+           for (q in  1:nrun) {
+              globalbootarray[m,j,k,q] = sum(bootarray[,j,k,q]*comb_all[,m])
+
+}}}}
+
+
+globalbootconf = c(1:(3*glresp*n*N*nstep))*0
+dim(globalbootconf) = c(glresp,n*N,nstep,3)
+globalbootconf[,,,1] = globalbootarray[,,,1]
+
+for (i in 1:glresp)       {
+   for (j in 1:(n*N))     {
+      for (k in 1:nstep ) {
+              globalbootconf[i,j,k,2:3] = quantile(globalbootarray[i,j,k,],c(.05,.95))
+}}}
+dim(globalbootconf)
+ACCbootconf3N = ACCIRFconfR(globalbootconf)
+ACCbootconfconcertHH = ACCbootconf3N
+
+plot35(ACCbootconfconcertHH,(c(4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4)/4+0), c(1:15)*2-1,c(-10,10),c(-10,10))
+
+
+########## global and reginal responses to a global and reginal shocks
+
+
+IRFC  = irf_MRGVAR_CB1(res=res_e,nstep=20,comb=comb_all,state=rep(2,15),irf="comb1",runs=20,conf=c(0.05,0.95),NT=1)
+
+ACCbootconfcombHH = IRFC[[2]]
+
+x11()  # FSI responses to a global one unit FSI shock
+plot35(ACCbootconfcombHH,c(1:15)*2-1,(c(4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4)/4+0),c(-10,10),c(-10,10))
+x11()  # IP responses to a global one unit FSI  shock
+plot35(ACCbootconfcombHH,c(1:15)*2,(c(4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4)/4+0),c(-10,10),c(-10,10))
+
+x11()  # FSI responses to an EU one unit FSI shock
+plot35(ACCbootconfcombHH,c(1:15)*2-1,(c(4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4)/4+2),c(-10,10),c(-10,10))
+x11()  # IP responses to an EU one unit FSI  shock
+plot35(ACCbootconfcombHH,c(1:15)*2,(c(4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4)/4+2),c(-10,10),c(-10,10))
+
+x11()  # FSI responses to a global one unit IP shock
+plot35(ACCbootconfcombHH,c(1:15)*2-1,(c(4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4)/4+1),c(-10,10),c(-10,10))
+x11()  # IP responses to a global one unit IP  shock
+plot35(ACCbootconfcombHH,c(1:15)*2,(c(4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4)/4+1),c(-10,10),c(-10,10))
+
+
+########## global and regional responses ##############
+
+
+bootarray = IRFC[[8]]
+
+for (m in 1:glresp)       {
+   for (j in 1:(n*N))     {
+      for (k in 1:nstep ) {
+           for (q in  1:nrun) {
+              globalbootarray[m,j,k,q] = sum(bootarray[,j,k,q]*comb_all[,m])
+
+}}}}
+
+
+globalbootconf = c(1:(3*glresp*n*N*nstep))*0
+dim(globalbootconf) = c(glresp,n*N,nstep,3)
+globalbootconf[,,,1] = globalbootarray[,,,1]
+
+for (i in 1:glresp)       {
+   for (j in 1:(n*N))     {
+      for (k in 1:nstep ) {
+              globalbootconf[i,j,k,2:3] = quantile(globalbootarray[i,j,k,],c(.05,.95))
+}}}
+dim(globalbootconf)
+ACCbootconf3N = ACCIRFconfR(globalbootconf)
+globalACCbootconfcombHH = ACCbootconf3N
+##globalACCbootconfcombLL = ACCbootconf3N
+dim(globalACCbootconfcombHH)
+
+x11()  # global FSI responses to a one unit FSI shock from global, EU, north E, south E and North America
+plot35(globalACCbootconfcombHH,(c(4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4)/4+0), c(1:15)*2-1,c(-10,10),c(-10,10))
+x11()  # global IP responses to a one unit FSI shock from global, EU, north E, south E and North America
+plot35(globalACCbootconfcombHH,(c(4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4)/4+1), c(1:15)*2-1,c(-10,10),c(-10,10))
+
+x11()  # EU FSI responses to a one unit FSI shock from global, EU, north E, south E and North America
+plot35(globalACCbootconfcombHH,(c(4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4)/4+0), c(1:15)*2-0,c(-10,10),c(-10,10))
+x11()  #EU IP responses to a one unit IP shock from global, EU, north E, south E and North America
+plot35(globalACCbootconfcombHH,(c(4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4)/4+1), c(1:15)*2-0,c(-10,10),c(-10,10))
+
+
+
+```
+
